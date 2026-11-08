@@ -1,18 +1,14 @@
 # Siam drafts
 
-Public **login-only app shell** for @masumparvej_'s private review board.
+A simple **Password → Unlock** board for @masumparvej_. No email, account creation or reviewer enrollment.
 
-The shell contains no draft batch or feedback. A confirmed Supabase account must be explicitly approved by the owner before authenticated database access is allowed. Creating an account never grants board membership automatically.
+The public site contains only a shell. The password is verified on the server using a salted slow verifier; drafts and feedback are fetched only with an expiring opaque session. The password, verifier and privileged database credentials are never included in this repository or frontend. Use **Lock** to revoke the current session and return to the password screen.
 
-1. Open the site and choose **Create account**, or sign in if already registered.
-2. Confirm your email, then return to sign in. If a confirmation redirects elsewhere, reopen this site.
-3. Tell the owner which confirmed email you used. The owner approves that exact identity; refresh afterward.
-4. The stable site loads the newest accessible daily batch. `?date=YYYY-MM-DD` selects an immutable dated batch.
+Shared access uses a common board identity, not individual reviewer attribution. Sessions last at most12 hours. HTTPS protects transport; no end-to-end encryption claim is made. Keep the chosen password private.
 
-The project must allow this site's signup callback URL in its Supabase Auth redirect settings for automatic email-confirmation return. No global provider/SMTP settings are changed by this repository. No password is shared with the bot or owner.
+Latest board: https://tanzim-grid.github.io/siam-drafts-app/
+Dated batch: append `?date=YYYY-MM-DD`.
 
-Private data and historical artifacts stay in the separate private source repository and authenticated Supabase tables. Only a frontend-safe publishable key is included here. Do not upload private JSON/HTML artifacts into this repository or its history.
+Daily publication changes the private Supabase batch only; no public code deployment is needed. Private JSON/HTML artifacts must never be added to this repo. The existing board design, actions, undo/redo and feedback semantics are preserved. Opening X intent is not proof of posting.
 
-Daily content publication changes the authenticated database only; it does not require a public code push. Board UI remains frozen while the six daily data constants arrive from the authenticated payload.
-
-`node tests/shell.test.cjs` validates shell syntax and mocked auth/data gating. Actual browser and email confirmation testing still requires the reviewer's own action.
+`node tests/shell.test.cjs` checks the shell and mocked password/session storage transport. Backend source/runbook is in the private Siam source repository.

@@ -7,18 +7,20 @@
 </head><body><div id="root"></div>
 <!-- Board template: the bot swaps only the DAILY DATA constants (DATE, DATE_LABEL, ROWS, RATINGS, TRENDING, CONTEXT). Feedback saves in this browser; add your own database sync if you want it across devices. -->
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.js"></script>
-<script>window.MASUM_CONFIG = Object.freeze({
-  url: 'https://uayxhyruyapwkkekdefs.supabase.co',
-  publishableKey: 'sb_publishable_rflL8Bh4BPC6gGspOeUu9A_JyTaNYu-'
-});
-
-/* Siam drafts: additive authenticated storage adapter. No privileged key. */
+<script>/* Siam drafts: additive authenticated storage adapter. No privileged key. */
 window.BoardSync = (() => {
-  const cfg = window.MASUM_CONFIG;
-  const client = window.supabase.createClient(cfg.url, cfg.publishableKey, {
-    auth: { storageKey: 'siam-masum-auth-v1', persistSession: true, autoRefreshToken: true, flowType: 'pkce', detectSessionInUrl: true }
-  });
+  const API='https://uayxhyruyapwkkekdefs.supabase.co/functions/v1/siam-gateway';
+  let token=window.sessionStorage.getItem('siam-shared-session-v1');
+  let cachedBatch=null;
+  async function request(path, options={}) {
+    const response=await fetch(API+path,{...options,credentials:'omit',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{}),...options.headers}});
+    const data=await response.json();
+    if(!response.ok) {
+      if(response.status===401) {window.sessionStorage.removeItem('siam-shared-session-v1');token=null;if(mounted)location.reload();}
+      throw new Error(data.error||'Board request failed');
+    }
+    return data;
+  }
   let user, day, prefix, busy = false, retry = 1000, timer, stateRows = [], mounted = false;
   const raw = window.localStorage;
   const status = { phase: 'locked', lastError: null };
@@ -42,7 +44,7 @@ window.BoardSync = (() => {
   }
   function updateStatus() {
     const el = document.getElementById('masum-sync-label');
-    if (el) el.textContent = status.phase === 'synced' ? 'Saved online' : status.phase === 'queued' ? 'Saved locally · sync pending' : status.phase === 'syncing' ? 'Syncing…' : 'Authenticated · ready';
+    if (el) el.textContent = status.phase === 'synced' ? 'Saved online' : status.phase === 'queued' ? 'Saved locally · sync pending' : status.phase === 'syncing' ? 'Syncing…' : 'Unlocked · ready';
   }
   const storage = {
     getItem(key) { return raw.getItem(keyFor(key)); },
@@ -90,8 +92,7 @@ window.BoardSync = (() => {
     put('board-feedback-copied-' + day,grouped.exported?.fingerprint?.value || '');
   }
   async function pull() {
-    const {data,error} = await client.from('masum_state').select('day,kind,item,value').in('day',[day,'global']);
-    if (error) throw error;
+    const data=await request('/state?day='+encodeURIComponent(day));
     const before = JSON.stringify(stateRows); stateRows = data;
     materialize();
     if (mounted && before !== JSON.stringify(data)) window.dispatchEvent(new Event('masum:remote'));
@@ -104,85 +105,62 @@ window.BoardSync = (() => {
       if (!navigator.onLine) throw new Error('Offline');
       while (queue().length) {
         const e=queue()[0];
-        const {error} = await client.rpc('masum_apply_event',{p_id:e.id,p_day:e.day,p_kind:e.kind,p_item:e.item,p_patch:e.patch});
-        if (error) throw error;
+        await request('/event',{method:'POST',body:JSON.stringify(e)});
         saveQueue(queue().filter(x=>x.id!==e.id));
       }
       await pull(); retry=1000; status.phase=queue().length ? 'queued':'synced'; status.lastError=null;
     } catch(e) { status.phase='queued'; status.lastError=e.message; schedule(retry); retry=Math.min(60000,retry*2); }
     finally { busy=false; updateStatus(); }
   }
-  const gate = document.createElement('div');
-  gate.id='masum-auth';
+  const gate=document.createElement('div'); gate.id='masum-auth';
   gate.style.cssText='position:fixed;inset:0;background:#f7f7f8;z-index:9999;display:grid;place-items:center;font-family:system-ui;color:#202124';
-  gate.innerHTML='<form style="width:min(380px,90vw);display:grid;gap:14px"><h1>Siam drafts</h1><p>Private review board for @masumparvej_. Sign in, or create your own account and wait for owner approval.</p><label>Email <input name="email" type="email" autocomplete="username" required style="width:100%;padding:10px;box-sizing:border-box"></label><label>Password <input name="password" type="password" autocomplete="current-password" minlength="8" required style="width:100%;padding:10px;box-sizing:border-box"></label><button type="submit" style="padding:10px">Sign in</button><button type="button" data-signup style="padding:10px">Create account</button><button type="button" data-signout>Sign out / switch account</button><p role="status" id="masum-auth-message">Creating an account does not grant access. Confirm your email, then ask the owner to approve that email. Never share your password.</p></form>';
+  gate.innerHTML='<form style="width:min(360px,90vw);display:grid;gap:14px"><h1>Siam drafts</h1><p>Enter the board password to unlock.</p><label>Password <input name="password" type="password" autocomplete="current-password" required autofocus style="width:100%;padding:10px;box-sizing:border-box"></label><button type="submit" style="padding:10px">Unlock</button><p role="status">Private drafts stay on the server until unlocked.</p></form>';
   document.body.appendChild(gate);
-  const message = text => { gate.querySelector('[role=status]').textContent=text; };
-  async function unlock(session) {
-    if (!session) return false;
-    const {data,error}=await client.from('masum_members').select('user_id').eq('user_id',session.user.id).maybeSingle();
-    if(error || !data) { message('Signed in as ' + (session.user.email || 'your account') + '. Access is pending: ask the owner to approve this email. No draft data is available yet.'); return false; }
-    user=session.user; prefix='siam:masum:'+user.id+':';
-    gate.remove(); resolveReady();
-    return true;
+  const message=text=>{gate.querySelector('[role=status]').textContent=text;};
+  const selectedDay=()=>{const value=new URL(location.href).searchParams.get('date');if(value&&!/^\d{4}-\d{2}-\d{2}$/.test(value))throw new Error('Invalid date');return value;};
+  async function loadBatch(requestedDay) {
+    if(!token)throw new Error('Password required');
+    const key=requestedDay||'latest';
+    if(cachedBatch?.key===key)return cachedBatch.value;
+    const value=await request('/batch'+(requestedDay?'?day='+encodeURIComponent(requestedDay):''));
+    if(!value||!Array.isArray(value.ROWS)||value.ROWS.length!==5)throw new Error('Invalid batch');
+    cachedBatch={key,value};return value;
   }
-  gate.querySelector('form').onsubmit=async e => {
-    e.preventDefault(); const form=e.currentTarget, button=form.querySelector('button'); button.disabled=true; message('Signing in…');
+  async function unlock() {
+    await loadBatch(selectedDay());
+    user='shared';prefix='siam:masum:shared-v1:';
+    gate.remove();resolveReady();
+    const expiry=Number(window.sessionStorage.getItem('siam-shared-expiry-v1'));
+    if(expiry>Date.now())setTimeout(()=>{window.sessionStorage.removeItem('siam-shared-session-v1');location.reload();},Math.min(expiry-Date.now(),2147483647));
+  }
+  async function lock() {
+    try {if(token)await request('/logout',{method:'POST',body:'{}'});}catch(_){}
+    window.sessionStorage.removeItem('siam-shared-session-v1');window.sessionStorage.removeItem('siam-shared-expiry-v1');token=null;location.reload();
+  }
+  gate.querySelector('form').onsubmit=async e=>{
+    e.preventDefault();const form=e.currentTarget,button=form.querySelector('button');button.disabled=true;message('Unlocking…');
     try {
-      const {data,error}=await client.auth.signInWithPassword({email:form.elements.email.value,password:form.elements.password.value});
-      form.elements.password.value='';
-      if(error) throw error;
-      await unlock(data.session);
-    } catch (_) { message('Unable to sign in. Check the account and provider configuration.'); }
-    finally { button.disabled=false; }
+      const result=await request('/login',{method:'POST',body:JSON.stringify({password:form.elements.password.value})});
+      form.elements.password.value='';token=result.token;
+      window.sessionStorage.setItem('siam-shared-session-v1',token);
+      window.sessionStorage.setItem('siam-shared-expiry-v1',String(Date.parse(result.expires_at)));
+      await unlock();
+    } catch(e) {message(e.message==='Invalid password'?'Incorrect password. Try again.':e.message);}
+    finally {form.elements.password.value='';button.disabled=false;}
   };
-  gate.querySelector('[data-signout]').onclick=async()=>{await client.auth.signOut();location.reload();};
-  gate.querySelector('[data-signup]').onclick=async()=>{
-    const form=gate.querySelector('form');
-    if (!form.reportValidity()) return;
-    const buttons=[...form.querySelectorAll('button')]; buttons.forEach(b=>b.disabled=true);
-    message('Creating your account…');
-    try {
-      const redirect=new URL(location.href); redirect.hash='';
-      // Date deep link is preserved. This URL must be allowed in project redirects.
-      const {data,error}=await client.auth.signUp({email:form.elements.email.value,password:form.elements.password.value,options:{emailRedirectTo:redirect.href}});
-      form.elements.password.value='';
-      if (error) throw error;
-      if (data.session) await unlock(data.session);
-      else message('Check your email to confirm your account, then return here and sign in. Access stays pending until the owner approves your confirmed email. If the confirmation redirects elsewhere, reopen this board.');
-    } catch(e) { message('Account creation could not finish: '+e.message+'. No board access was granted.'); }
-    finally { buttons.forEach(b=>b.disabled=false); }
-  };
-  client.auth.getSession().then(({data})=>unlock(data.session)).catch(()=>message('Unable to reach sign-in. Please retry.'));
-  client.auth.onAuthStateChange((event,session)=>{
-    if(event==='SIGNED_OUT' || (event==='TOKEN_REFRESHED' && !session)) location.reload();
-  });
+  if(token)unlock().catch(()=>{message('Session unavailable or expired. Enter the password to unlock.');});
   async function init(date) {
     day=date;
     await pull(); // Never overwrite a local outbox during hydration.
     const bar=document.createElement('div');
     bar.style.cssText='position:fixed;bottom:10px;right:12px;z-index:100;background:#fff;border:1px solid #ddd;border-radius:8px;padding:8px;font:12px system-ui;color:#444';
-    bar.innerHTML='<span id="masum-sync-label">Authenticated · ready</span> <button type="button">Sign out</button>';
-    bar.querySelector('button').onclick=()=>client.auth.signOut(); document.body.appendChild(bar);
+    bar.innerHTML='<span id="masum-sync-label">Unlocked · ready</span> <button type="button">Lock</button>';
+    bar.querySelector('button').onclick=lock; document.body.appendChild(bar);
     mounted=true; schedule(100);
     window.addEventListener('online',()=>schedule(0));
     window.addEventListener('focus',()=>schedule(0));
     window.addEventListener('storage',e=>{if(e.key===outboxKey()) schedule(0);});
     setInterval(()=>schedule(0),20000);
-  }
-  async function loadBatch(requestedDay) {
-    if (!user) throw new Error('Authentication required');
-    let query = client.from('masum_batches').select('payload');
-    if (requestedDay) query = query.eq('day', requestedDay);
-    else query = query.order('day', {ascending:false}).limit(1);
-    const {data,error} = await query.maybeSingle();
-    if (error || !data) throw new Error('No accessible draft batch');
-    const b=data.payload;
-    if (!b || !Array.isArray(b.ROWS) || b.ROWS.length!==5 || !/^\d{4}-\d{2}-\d{2}$/.test(b.DATE)) throw new Error('Invalid batch');
-    for (const r of b.ROWS) for (const k of ['Draft',...Array.from({length:10},(_,i)=>'Variant '+(i+1))]) {
-      if (typeof r[k]!=='string') throw new Error('Invalid draft');
-    }
-    return b;
   }
   return {ready,init,storage,flush,status,loadBatch};
 })();
@@ -672,13 +650,10 @@ BoardSync.ready.then(() => BoardSync.init(DATE)).then(() => {
 });
 
 </script><script>
-// The only published artifact is this shell. No JSON/HTML batch is deployed.
-BoardSync.ready.then(async () => {
-  const date=new URL(location.href).searchParams.get('date');
-  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Invalid date');
-  window.MASUM_BATCH = await BoardSync.loadBatch(date);
-  const code=document.createElement('script');
-  code.textContent=document.getElementById('masum-private-ui').textContent;
-  document.body.appendChild(code);
-}).catch(() => {document.getElementById('root').textContent='No accessible batch. Check access or retry after publication.';});
+BoardSync.ready.then(async()=>{
+ const date=new URL(location.href).searchParams.get('date');
+ if(date&&!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Error('Invalid date');
+ window.MASUM_BATCH=await BoardSync.loadBatch(date);
+ const code=document.createElement('script');code.textContent=document.getElementById('masum-private-ui').textContent;document.body.appendChild(code);
+}).catch(()=>{document.getElementById('root').textContent='Unable to load private batch. Reload to retry.';});
 </script></body></html>
