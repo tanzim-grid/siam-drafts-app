@@ -5,13 +5,15 @@ assert.ok(html.includes('Siam drafts'));assert.ok(html.includes('Unlock'));
 assert.ok(!/signUp|signInWithPassword|type="email"|publishableKey|sb_secret_[A-Za-z0-9_-]{12,}/.test(html));
 assert.ok(!/const ROWS\s*=\s*\[/.test(html));assert.ok(html.includes('type="text/plain" id="masum-private-ui"'));
 const code=scripts.find(s=>s[2].includes('window.BoardSync ='))[2],local=new Map(),session=new Map(),server=new Map();let revoked=false;
-function runtime(){
- const button={disabled:false},form={elements:{password:{value:''}},querySelector:()=>button};
- const gate={style:{},querySelector:s=>s==='form'?form:{textContent:'',onclick:null},remove(){},set innerHTML(v){}};
+function runtime(failure){
+ const button={disabled:false},form={elements:{password:{value:'',type:'password'}},querySelector:()=>button},message={textContent:''},reveal={setAttribute(){}};
+ const gate={style:{},querySelector:s=>s==='form'?form:s==='[data-show-password]'?reveal:message,remove(){},set innerHTML(v){}};
  const document={body:{appendChild(){}},createElement:()=>gate,getElementById:()=>({textContent:''})};
  const storage=m=>({getItem:k=>m.get(k)||null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k)});
  const fetch=async(url,opt={})=>{
   const route=url.split('/').pop().split('?')[0];const body=opt.body?JSON.parse(opt.body):{};
+  if(failure==='network')throw new TypeError('fetch failed');
+  if(failure)return {ok:false,status:failure,json:async()=>({error:'Invalid password'})};
   let status=200,data={};const authorized=opt.headers.Authorization==='Bearer '+'a'.repeat(64)&&!revoked;
   if(route==='login'){if(body.password==='fixture-test-not-real'){revoked=false;data={token:'a'.repeat(64),expires_at:new Date(Date.now()+43200000).toISOString()};}else{status=401;data={error:'Invalid password'};}}
   else if(!authorized){status=401;data={error:'Password required'};}
@@ -23,10 +25,11 @@ function runtime(){
  };
  const window={localStorage:storage(local),sessionStorage:storage(session),addEventListener(){},dispatchEvent(){}};
  const ctx=vm.createContext({window,document,fetch,navigator:{onLine:true},location:{href:'https://tanzim-grid.github.io/siam-drafts-app/?date=2026-11-08',reload(){}},URL,crypto:webcrypto,Event:class{},setTimeout:()=>1,clearTimeout(){},setInterval(){}});
- vm.runInContext(code,ctx);return {sync:window.BoardSync,form};
+ vm.runInContext(code,ctx);return {sync:window.BoardSync,form,message,reveal};
 }
 (async()=>{
- let a=runtime();a.form.elements.password.value='wrong-fixture';await a.form.onsubmit({preventDefault(){},currentTarget:a.form});assert.equal(session.size,0);assert.equal(a.form.elements.password.value,'');
+ for(const [failure,expected] of [[429,/Too many/],[503,/temporarily unavailable/],['network',/Cannot reach/]]){const r=runtime(failure);r.form.elements.password.value='fixture';await r.form.onsubmit({preventDefault(){},currentTarget:r.form});assert.match(r.message.textContent,expected);assert.doesNotMatch(r.message.textContent,/Password did not match/);}
+ let a=runtime();a.reveal.onclick();assert.equal(a.form.elements.password.type,'text');a.reveal.onclick();assert.equal(a.form.elements.password.type,'password');a.form.elements.password.value='wrong-fixture';await a.form.onsubmit({preventDefault(){},currentTarget:a.form});assert.match(a.message.textContent,/Password did not match/);assert.equal(session.size,0);assert.equal(a.form.elements.password.value,'');
  a.form.elements.password.value='fixture-test-not-real';await a.form.onsubmit({preventDefault(){},currentTarget:a.form});await a.sync.ready;await a.sync.init('2026-11-08');
  a.sync.storage.setItem('board-feedback-2026-11-08',JSON.stringify({'1-D':{copied:true},'2-V1':{needsWork:true}}));
  a.sync.storage.setItem('board-history-2026-11-08',JSON.stringify({'1':{u:[{label:'copy',snap:{}}],r:[]}}));
