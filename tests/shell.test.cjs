@@ -1,7 +1,13 @@
 const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict'),{webcrypto}=require('node:crypto');
 const html=fs.readFileSync('index.html','utf8'),scripts=[...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
 for(const s of scripts)new vm.Script(s[2]);
-assert.ok(html.includes('Masumparvej_ post drafts'));assert.ok(html.includes('Unlock'));
+assert.ok(html.includes('Masumparvej_ post drafts'));
+assert.ok(html.includes('rel="icon"') && html.includes('favicon.svg') && html.includes('type="image/svg+xml"'));
+assert.ok(html.includes('favicon.png'));
+const fav=fs.readFileSync('favicon.svg','utf8');
+assert.ok(fav.includes('M2 8C5.47582 13.3333 18.5242 13.3333 22 8'));
+assert.ok(fav.includes('prefers-color-scheme: dark'));
+assert.ok(fs.existsSync('favicon.png'));assert.ok(html.includes('Unlock'));
 assert.ok(!/signUp|signInWithPassword|type="email"|publishableKey|sb_secret_[A-Za-z0-9_-]{12,}/.test(html));
 assert.ok(!/const ROWS\s*=\s*\[/.test(html));assert.ok(html.includes('type="text/plain" id="masum-private-ui"'));
 const code=scripts.find(s=>s[2].includes('window.BoardSync ='))[2],local=new Map(),session=new Map(),server=new Map();let revoked=false;
