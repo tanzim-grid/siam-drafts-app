@@ -42,6 +42,11 @@ function runtime(failure){
  assert.equal(JSON.parse(b.sync.storage.getItem('board-history-2026-11-08'))['1'].u.length,1);
  assert.ok([...local.keys()].every(k=>k.startsWith('siam:masum:shared-v1:')));
  assert.ok(html.includes('hg-approve-button') && html.includes('CheckIcon') && html.indexOf('hg-approve-button') < html.indexOf('I posted this'));
+ assert.ok(html.includes('content:attr(title)'));
+ assert.ok(html.includes('.hg-card-controls > button[title]:hover::after'));
+ for (const t of ['I posted this','Approved','Needs improvement (not disliked)','Hide']) assert.ok(html.includes('title:') && html.includes(t), t);
+ assert.ok(html.includes('title: g ? "Posted (click to unmark)" : "I posted this"'));
+ assert.ok(html.includes('title: a ? "Approved (click to unmark)" : "Approved"'));
  b.sync.storage.setItem('board-feedback-2026-11-08',JSON.stringify({'1-D':{copied:true,gem:true,needsWork:true,approved:true},'2-V1':{needsWork:true}})); await b.sync.flush();
  assert.equal(JSON.parse(b.sync.storage.getItem('board-feedback-2026-11-08'))['1-D'].approved,true);
  assert.equal(server.get(k).value.approved,true); assert.equal(server.get(k).value.gem,true);
