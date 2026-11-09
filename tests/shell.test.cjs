@@ -44,11 +44,23 @@ function runtime(failure){
  assert.ok(html.includes('hg-approve-button') && html.includes('CheckIcon') && html.indexOf('hg-approve-button') < html.indexOf('I posted this'));
  assert.ok(html.includes('content:attr(title)'));
  assert.ok(html.includes('.hg-card-controls > button[title]:hover::after'));
- for (const t of ['I posted this','Approved','Needs improvement (not disliked)','Hide']) assert.ok(html.includes('title:') && html.includes(t), t);
+ for (const t of ['I posted this','Approved','Needs improvement (not disliked)','Hide','Edit']) assert.ok(html.includes('title:') && html.includes(t), t);
  assert.ok(html.includes('title: g ? "Posted (click to unmark)" : "I posted this"'));
  assert.ok(html.includes('title: a ? "Approved (click to unmark)" : "Approved"'));
+ assert.ok(html.includes('title: "Edit"') && html.includes('"aria-label": "Edit"'));
+ assert.ok(html.includes('hg-edit-button') && html.includes('PencilEdit02Icon') && html.includes('saveEdit') && html.includes('cancelEdit'));
+ assert.ok(html.includes('Text cannot be empty.'));
+ assert.ok(html.indexOf('hg-edit-button", title: "Edit"') < html.indexOf('hg-approve-button", title: a'));
  b.sync.storage.setItem('board-feedback-2026-11-08',JSON.stringify({'1-D':{copied:true,gem:true,needsWork:true,approved:true},'2-V1':{needsWork:true}})); await b.sync.flush();
  assert.equal(JSON.parse(b.sync.storage.getItem('board-feedback-2026-11-08'))['1-D'].approved,true);
  assert.equal(server.get(k).value.approved,true); assert.equal(server.get(k).value.gem,true);
-console.log('PASS: password-only shell; no data or privileged keys; wrong password leaves locked; opaque-session reload; persistent outbox; independent field merges including approved; history; isolated shared-board keys; Approved control present left of gem.');
+ // Edit field merges independently; empty reject is UI-only; multiline persists; null clears.
+ const edited='Hello\nworld & <x>';
+ b.sync.storage.setItem('board-feedback-2026-11-08',JSON.stringify({'1-D':{copied:true,gem:true,needsWork:true,approved:true,edit:edited},'2-V1':{needsWork:true}})); await b.sync.flush();
+ assert.equal(JSON.parse(b.sync.storage.getItem('board-feedback-2026-11-08'))['1-D'].edit,edited);
+ assert.equal(server.get(k).value.edit,edited); assert.equal(server.get(k).value.approved,true);
+ const cleared={'1-D':{copied:true,gem:true,needsWork:true,approved:true},'2-V1':{needsWork:true}};
+ b.sync.storage.setItem('board-feedback-2026-11-08',JSON.stringify(cleared)); await b.sync.flush();
+ assert.equal(server.get(k).value.edit,undefined); assert.equal(server.get(k).value.gem,true);
+console.log('PASS: password-only shell; no data or privileged keys; wrong password leaves locked; opaque-session reload; persistent outbox; independent field merges including approved+edit; history; isolated shared-board keys; Edit+Approved controls; hover titles.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
