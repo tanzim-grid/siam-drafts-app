@@ -41,5 +41,9 @@ function runtime(failure){
  assert.deepEqual(JSON.parse(b.sync.storage.getItem('board-feedback-2026-11-08'))['1-D'],{copied:true,gem:true,needsWork:true});
  assert.equal(JSON.parse(b.sync.storage.getItem('board-history-2026-11-08'))['1'].u.length,1);
  assert.ok([...local.keys()].every(k=>k.startsWith('siam:masum:shared-v1:')));
- console.log('PASS: password-only shell; no data or privileged keys; wrong password leaves locked; opaque-session reload; persistent outbox; independent field merges; history; isolated shared-board keys.');
+ assert.ok(html.includes('hg-approve-button') && html.includes('CheckIcon') && html.indexOf('hg-approve-button') < html.indexOf('I posted this'));
+ b.sync.storage.setItem('board-feedback-2026-11-08',JSON.stringify({'1-D':{copied:true,gem:true,needsWork:true,approved:true},'2-V1':{needsWork:true}})); await b.sync.flush();
+ assert.equal(JSON.parse(b.sync.storage.getItem('board-feedback-2026-11-08'))['1-D'].approved,true);
+ assert.equal(server.get(k).value.approved,true); assert.equal(server.get(k).value.gem,true);
+console.log('PASS: password-only shell; no data or privileged keys; wrong password leaves locked; opaque-session reload; persistent outbox; independent field merges including approved; history; isolated shared-board keys; Approved control present left of gem.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
