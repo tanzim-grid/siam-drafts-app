@@ -39,14 +39,21 @@ function runtime(failure){
  a.form.elements.password.value='fixture-test-not-real';await a.form.onsubmit({preventDefault(){},currentTarget:a.form});await a.sync.ready;await a.sync.init('2026-11-08');
  a.sync.storage.setItem('board-feedback-2026-11-08',JSON.stringify({'1-D':{copied:true},'2-V1':{needsWork:true}}));
  a.sync.storage.setItem('board-history-2026-11-08',JSON.stringify({'1':{u:[{label:'copy',snap:{}}],r:[]}}));
- // A reload reuses opaque session, durable outbox and shared namespace.
+ assert.equal(local.get('siam-shared-session-v1'),'a'.repeat(64));
+ assert.ok(!session.has('siam-shared-session-v1'));
+ assert.ok(![...local.values(),...[...local.keys()]].some(v=>String(v).includes('fixture-test-not-real')));
+ // Reload and a new tab / closed-browser return: sessionStorage empty, localStorage token reused, no password prompt.
+ session.clear();
  const b=runtime();await b.sync.ready;await b.sync.init('2026-11-08');await b.sync.flush();
+ assert.equal(local.get('siam-shared-session-v1'),'a'.repeat(64));
+ assert.ok(!session.has('siam-shared-session-v1'));
+
  assert.equal(JSON.parse(b.sync.storage.getItem('board-feedback-2026-11-08'))['1-D'].copied,true);
  const k=JSON.stringify(['2026-11-08','feedback','1-D']);server.get(k).value.gem=true;
  b.sync.storage.setItem('board-feedback-2026-11-08',JSON.stringify({'1-D':{copied:true,needsWork:true},'2-V1':{needsWork:true}}));await b.sync.flush();
  assert.deepEqual(JSON.parse(b.sync.storage.getItem('board-feedback-2026-11-08'))['1-D'],{copied:true,gem:true,needsWork:true});
  assert.equal(JSON.parse(b.sync.storage.getItem('board-history-2026-11-08'))['1'].u.length,1);
- assert.ok([...local.keys()].every(k=>k.startsWith('siam:masum:shared-v1:')));
+ assert.ok([...local.keys()].every(k=>k.startsWith('siam:masum:shared-v1:')||k==='siam-shared-session-v1'||k==='siam-shared-expiry-v1'));
  assert.ok(html.includes('hg-approve-button') && html.includes('CheckIcon') && html.indexOf('hg-approve-button') < html.indexOf('I posted this'));
  assert.ok(html.includes('content:attr(data-label)'));
  assert.ok(html.includes('.hg-card-controls > button[data-label]:hover::after'));
@@ -76,5 +83,16 @@ function runtime(failure){
  assert.ok(!pencil.startsWith('"PencilEdit02Icon": [[['));
  assert.equal([...pencil.matchAll(/"stroke": "currentColor"/g)].length, 2);
  assert.ok(html.includes('hg-slot-parked') && html.includes(' hidden or needs work') && html.includes('allCardsParked'));
-console.log('PASS: password-only shell; no data or privileged keys; wrong password leaves locked; opaque-session reload; persistent outbox; independent field merges including approved+edit; history; isolated shared-board keys; Edit+Approved controls; hover titles.');
+ // Prior sessionStorage sessions migrate into localStorage and are cleared from the tab store.
+ session.clear();
+ // Keep the durable token test already done; now seed only sessionStorage as a pre-upgrade browser.
+ const keep=local.get('siam-shared-session-v1');
+ local.delete('siam-shared-session-v1'); local.delete('siam-shared-expiry-v1');
+ session.set('siam-shared-session-v1','a'.repeat(64));
+ session.set('siam-shared-expiry-v1',String(Date.now()+86400000));
+ const m=runtime(); await m.sync.ready;
+ assert.equal(local.get('siam-shared-session-v1'),'a'.repeat(64));
+ assert.ok(!session.has('siam-shared-session-v1'));
+ assert.ok(html.includes('persist=window.localStorage') && html.includes('saveSession') && !html.includes('sessionStorage.setItem(\'siam-shared-session-v1\''));
+console.log('PASS: password-only shell; no data or privileged keys; wrong password leaves locked; durable localStorage session across reload/new-tab/restart; sessionStorage migration; persistent outbox; independent field merges including approved+edit; history; isolated shared-board keys; Edit+Approved controls; hover titles.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
