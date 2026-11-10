@@ -83,8 +83,9 @@ function runtime(failure){
  assert.ok(!pencil.startsWith('"PencilEdit02Icon": [[['));
  assert.equal([...pencil.matchAll(/"stroke": "currentColor"/g)].length, 2);
  assert.ok(html.includes('hg-slot-parked') && html.includes(' hidden or needs work') && html.includes('allCardsParked'));
- assert.ok(html.includes('function xPostUrl') && html.includes('xPostUrl(t.url)') && html.includes('xPostUrl(cx.url)'));
- assert.ok(!html.includes('href: t.url') && !html.includes('href: cx.url'));
+ assert.ok(html.includes('function xPostUrl') && html.includes('xPostUrl(t.xUrl)') && html.includes('xPostUrl(cx.xUrl)'));
+ assert.ok(html.includes('hg-trend-link') && html.includes('View post on X') && html.includes('Tap (i) to open the X post'));
+ assert.ok(!html.includes('href: t.url') && !html.includes('href: cx.url') && !html.includes('xPostUrl(t.url)') && !html.includes('xPostUrl(cx.url)'));
  // Prior sessionStorage sessions migrate into localStorage and are cleared from the tab store.
  session.clear();
  // Keep the durable token test already done; now seed only sessionStorage as a pre-upgrade browser.
