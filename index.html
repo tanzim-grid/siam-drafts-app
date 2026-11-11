@@ -401,6 +401,7 @@ body:has(.hg-light) #hg-sync-status{background:#fffffff2!important;border-color:
 .hg-forlater-dates{font-size:11px;color:#8e98aa}
 .hg-forlater-actions{display:flex;gap:8px;align-items:center}
 .hg-forlater-actions .hg-button{min-height:30px;padding:4px 10px;display:inline-flex;align-items:center;gap:6px}
+.hg-forlater-actions .hg-post-link{flex:0 0 auto;min-height:30px;padding:4px 10px;display:inline-flex;align-items:center}
 .hg-forlater-item .hg-card-edit{margin-top:0}
 .hg-forlater-item[data-approved]{border-color:#4ADE8080}
 .hg-forlater-remove{position:absolute;top:8px;right:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;padding:0;border-radius:7px;background:transparent;border:1px solid #343e4c;color:#abb6c6;font-size:17px;line-height:1;cursor:pointer}
@@ -586,6 +587,9 @@ function ForLaterBox({ later, open, setOpen, fb, mark, applyEdit }) {
             React.createElement("button", { type: "button", className: "hg-gem-button hg-edit-button", "data-label": "Edit", "aria-label": "Edit", onClick: () => beginEdit(it) },
               React.createElement(Ico, { n: "PencilEdit02Icon", fill: "none" })),
             approveBtn(it, a),
+            React.createElement("a", { className: "hg-post-link", href: urlOf(it.text), target: "_blank", rel: "noopener noreferrer" },
+              React.createElement(HgIcon, null, React.createElement(Ico, { n: "LinkSquare02" })),
+              "Post on X"),
             React.createElement("button", { type: "button", className: "hg-button", onClick: () => copy(it) },
               React.createElement(HgIcon, null, React.createElement(Ico, { n: copied === it.uid ? "Tick02" : "Copy01" })),
               copied === it.uid ? "Copied \u2713" : "Copy")

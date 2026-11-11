@@ -89,6 +89,7 @@ function runtime(failure){
  assert.ok(html.includes('ForLaterBox, { later, open: laterOpen, setOpen: setLaterOpen, fb, mark, applyEdit }'));
  assert.ok(html.includes('hg-forlater-actions') && html.includes('PencilEdit02Icon') && html.includes('function laterStamp'));
  assert.ok(html.includes('later.update(it.uid') && html.includes('toggleApproved') && html.includes('readFeedback'));
+ assert.ok(html.includes('href: urlOf(it.text)') && html.includes('"Post on X"') && html.includes('className: "hg-post-link"'));
 
  { const css=html.slice(html.indexOf('const CSS = `'),html.indexOf('`;',html.indexOf('const CSS = `'))).replace(/\/\*[\s\S]*?\*\//g,''); assert.ok(css.includes('.hg-forlater{') && css.includes('.hg-later-chip{') && css.includes('.hg-card[data-later]')); }
  // For later snapshots sync as global masum_state rows; removal is a tombstone field, never a delete.
