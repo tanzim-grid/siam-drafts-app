@@ -82,7 +82,7 @@ function runtime(failure){
  assert.ok(pencil.startsWith('"PencilEdit02Icon": [['));
  assert.ok(!pencil.startsWith('"PencilEdit02Icon": [[['));
  assert.equal([...pencil.matchAll(/"stroke": "currentColor"/g)].length, 2);
- assert.ok(html.includes('hg-slot-parked') && html.includes(' hidden or needs work') && html.includes('allCardsParked') && !html.includes('allOutOfRow'));
+ assert.ok(html.includes('function collapse()') && html.includes('.hidden-row{') && html.includes('Unhide all') && html.includes("grid: '.hg-card-grid'") && html.includes('data-card-id') && !html.includes('hg-slot-parked') && !html.includes('allCardsParked') && !html.includes('allOutOfRow'));
  assert.ok(html.includes('function xPostUrl') && html.includes('xPostUrl(t.xUrl)') && html.includes('xPostUrl(cx.xUrl)'));
  assert.ok(html.includes('hg-forlater') && html.includes('"Bookmark02": [[') && !html.includes('Bookmark01Icon') && !html.includes('Open on X') && html.includes('board-forlater') && html.includes("kind: 'forlater'") && html.includes("scope: 'global'"));
  assert.ok(html.includes('laterButton(later, DATE, c, r, laterSaved, show)') && html.includes('laterChip(setLaterOpen)') && html.includes('"Saved in For later \\u2191"') && html.includes('"Nothing saved yet. Tap the bookmark on any card to keep it here."'));
