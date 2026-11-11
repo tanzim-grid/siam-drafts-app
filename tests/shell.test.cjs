@@ -86,6 +86,10 @@ function runtime(failure){
  assert.ok(html.includes('function xPostUrl') && html.includes('xPostUrl(t.xUrl)') && html.includes('xPostUrl(cx.xUrl)'));
  assert.ok(html.includes('hg-forlater') && html.includes('"Bookmark02": [[') && !html.includes('Bookmark01Icon') && !html.includes('Open on X') && html.includes('board-forlater') && html.includes("kind: 'forlater'") && html.includes("scope: 'global'"));
  assert.ok(html.includes('laterButton(later, DATE, c, r, laterSaved, show)') && html.includes('laterChip(setLaterOpen)') && html.includes('"Saved in For later \\u2191"') && html.includes('"Nothing saved yet. Tap the bookmark on any card to keep it here."'));
+ assert.ok(html.includes('ForLaterBox, { later, open: laterOpen, setOpen: setLaterOpen, fb, mark, applyEdit }'));
+ assert.ok(html.includes('hg-forlater-actions') && html.includes('PencilEdit02Icon') && html.includes('function laterStamp'));
+ assert.ok(html.includes('later.update(it.uid') && html.includes('toggleApproved') && html.includes('readFeedback'));
+
  { const css=html.slice(html.indexOf('const CSS = `'),html.indexOf('`;',html.indexOf('const CSS = `'))).replace(/\/\*[\s\S]*?\*\//g,''); assert.ok(css.includes('.hg-forlater{') && css.includes('.hg-later-chip{') && css.includes('.hg-card[data-later]')); }
  // For later snapshots sync as global masum_state rows; removal is a tombstone field, never a delete.
  const uid='2026-11-08:1-D', fl={version:1,items:{[uid]:{uid,cardId:'1-D',boardDate:'2026-11-08',slot:'1',label:'Draft',post:'P',type:'T',text:'snap',savedAt:100}}};
@@ -94,6 +98,11 @@ function runtime(failure){
  fl.items[uid]={...fl.items[uid],removedAt:101}; b.sync.storage.setItem('board-forlater',JSON.stringify(fl));await b.sync.flush();
  assert.equal(server.get(fk).value.removedAt,101); assert.equal(server.get(fk).value.text,'snap');
  assert.equal(JSON.parse(b.sync.storage.getItem('board-forlater')).items[uid].removedAt,101);
+ b.sync.storage.setItem('board-feedback-2026-11-01',JSON.stringify({'3-V2':{approved:true,edit:'from later'}})); await b.sync.flush();
+ assert.equal(server.get(JSON.stringify(['2026-11-01','feedback','3-V2'])).value.approved,true);
+ assert.equal(server.get(JSON.stringify(['2026-11-01','feedback','3-V2'])).value.edit,'from later');
+ const got=await b.sync.readFeedback('2026-11-01');
+ assert.equal(got['3-V2'].approved,true);
  assert.ok(html.includes('hg-trend-link') && html.includes('View post on X') && html.includes('Tap (i) to open the X post'));
  assert.ok(!html.includes('href: t.url') && !html.includes('href: cx.url') && !html.includes('xPostUrl(t.url)') && !html.includes('xPostUrl(cx.url)'));
  // Prior sessionStorage sessions migrate into localStorage and are cleared from the tab store.
