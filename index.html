@@ -164,7 +164,7 @@ window.BoardSync = (() => {
     const key=requestedDay||'latest';
     if(cachedBatch?.key===key)return cachedBatch.value;
     const value=await request('/batch'+(requestedDay?'?day='+encodeURIComponent(requestedDay):''));
-    if(!value||!Array.isArray(value.ROWS)||value.ROWS.length!==5)throw new Error('Invalid batch');
+    if(!value||!Array.isArray(value.ROWS)||value.ROWS.length<1||value.ROWS.length>5)throw new Error('Invalid batch');
     cachedBatch={key,value};return value;
   }
   async function unlock() {
