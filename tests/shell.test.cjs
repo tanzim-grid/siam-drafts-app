@@ -107,6 +107,7 @@ function runtime(failure){
  assert.ok(html.includes('hg-trend-link') && html.includes('View post on X') && html.includes('Tap (i) to open the X post'));
  assert.ok(html.includes('className: "hg-button hg-copy-button hg-context-copy"') && html.includes('const copyContext') && html.includes('hg-context-wrap') && html.includes('hg-tooltip-actions'));
  assert.ok(html.includes('copied === kid ? "Copied" : "Copy"') && html.includes('max-width:calc(100vw - 32px)'));
+ assert.ok(html.includes('delayHideTip') && html.includes('keepTip') && html.includes('hg-tooltip::before') && html.includes('pointer-events:auto') && html.includes('z-index:60'));
  assert.ok(!html.includes('href: t.url') && !html.includes('href: cx.url') && !html.includes('xPostUrl(t.url)') && !html.includes('xPostUrl(cx.url)'));
  // Prior sessionStorage sessions migrate into localStorage and are cleared from the tab store.
  session.clear();
