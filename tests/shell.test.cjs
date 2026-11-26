@@ -128,5 +128,69 @@ assert.ok(!html.includes('style: { visibility: ghost ? "hidden" : "visible" }'))
 assert.ok(html.includes('const BG_MODES') && html.includes('const GLASS_CSS') && html.includes('const APPROVE_GLOW_CSS') && html.includes('const BgPicker') && html.includes('board-brightness') && html.includes("window['local'+'Storage']"));
 assert.ok(html.includes('function boardGatePalette') && html.includes("getItem('board-bg')"));
 assert.ok(!html.includes('Toggle dark/light mode') && !html.includes('noman-forlater') && !html.includes('__YOUR_PASSWORD_SHA256__'));
-console.log('PASS: password-only shell; no data or privileged keys; wrong password leaves locked; durable localStorage session across reload/new-tab/restart; sessionStorage migration; persistent outbox; independent field merges including approved+edit; history; isolated shared-board keys; Edit+Approved controls; hover titles.');
+
+assert.ok(html.includes('pendingFlush') && html.includes('else schedule(0)') && !html.includes('schedule(400)'));
+assert.ok(html.includes("Sync failed · '"));
+
+ // Immediate sync after every action (real timers). Errors must not look like a stuck "sync pending".
+ const wait=ms=>new Promise(r=>setTimeout(r,ms));
+ async function waitFor(fn,timeout=1500,msg='timeout'){const start=Date.now();let last;while(Date.now()-start<timeout){try{if(await fn())return;}catch(e){last=e;}await wait(8);}throw last||new Error(msg);}
+ function runtimeLive(opts={}){
+  const label={textContent:''};
+  const timeouts=new Set();
+  let eventDelay=opts.eventDelay||(async()=>{});
+  let failEvent=!!opts.failEvent;
+  const button={disabled:false},form={elements:{password:{value:'',type:'password'}},querySelector:()=>button},message={textContent:''},reveal={setAttribute(){}};
+  const gate={style:{},querySelector:s=>s==='form'?form:s==='[data-show-password]'?reveal:message,remove(){},set innerHTML(v){}};
+  const document={body:{appendChild(){}},createElement:()=>gate,getElementById:id=>id==='masum-sync-label'?label:{textContent:''}};
+  const storage=m=>({getItem:k=>m.get(k)||null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k)});
+  const fetch=async(url,opt={})=>{
+   const route=url.split('/').pop().split('?')[0];const body=opt.body?JSON.parse(opt.body):{};
+   if(route==='login'){if(body.password==='fixture-test-not-real'){revoked=false;return {ok:true,status:200,json:async()=>({token:'a'.repeat(64),expires_at:new Date(Date.now()+43200000).toISOString()})};}return {ok:false,status:401,json:async()=>({error:'Invalid password'})};}
+   const authorized=opt.headers.Authorization==='Bearer '+'a'.repeat(64)&&!revoked;
+   if(!authorized)return {ok:false,status:401,json:async()=>({error:'Password required'})};
+   if(route==='batch')return {ok:true,status:200,json:async()=>({DATE:'2026-11-08',ROWS:Array.from({length:5},()=>({}))})};
+   if(route==='event'){await eventDelay();if(failEvent)return {ok:false,status:400,json:async()=>({error:'Invalid event'})};const k=JSON.stringify([body.day,body.kind,body.item]);const r=server.get(k)||{day:body.day,kind:body.kind,item:body.item,value:{}};for(const[f,v]of Object.entries(body.patch))if(v===null)delete r.value[f];else r.value[f]=v;server.set(k,r);return {ok:true,status:200,json:async()=>({ok:true})};}
+   if(route==='state'){await eventDelay();return {ok:true,status:200,json:async()=>[...server.values()].map(x=>structuredClone(x))};}
+   if(route==='logout'){revoked=true;return {ok:true,status:200,json:async()=>({ok:true})};}
+   return {ok:false,status:404,json:async()=>({error:'Not found'})};
+  };
+  const setT=(fn,ms)=>{const id=setTimeout(()=>{timeouts.delete(id);fn();},ms);timeouts.add(id);return id;};
+  const clearT=id=>{timeouts.delete(id);clearTimeout(id);};
+  const window={localStorage:storage(local),sessionStorage:storage(session),addEventListener(){},dispatchEvent(){}};
+  const ctx=vm.createContext({window,document,fetch,navigator:{onLine:true},location:{href:'https://tanzim-grid.github.io/siam-drafts-app/?date=2026-11-08',reload(){}},URL,crypto:webcrypto,Event:class{},setTimeout:setT,clearTimeout:clearT,setInterval:()=>0,clearInterval(){}});
+  vm.runInContext(code,ctx);
+  return {sync:window.BoardSync,form,label,setEventDelay(fn){eventDelay=fn;},setFailEvent(v){failEvent=v;},dispose(){for(const id of timeouts)clearTimeout(id);timeouts.clear();}};
+ }
+ const live=runtimeLive();
+ try{
+  live.form.elements.password.value='fixture-test-not-real';
+  await live.form.onsubmit({preventDefault(){},currentTarget:live.form});
+  await live.sync.ready; await live.sync.init('2026-11-08');
+  live.sync.storage.setItem('board-feedback-2026-11-08',JSON.stringify({'1-D':{copied:true}}));
+  await waitFor(()=>live.sync.status.phase==='synced',1500,'action did not sync immediately');
+  assert.equal(live.label.textContent,'Saved online');
+  assert.equal(server.get(JSON.stringify(['2026-11-08','feedback','1-D'])).value.copied,true);
+  let hold=true, firstRelease;
+  const gate=new Promise(r=>{firstRelease=r;});
+  live.setEventDelay(async()=>{ if(hold){ hold=false; await gate; } });
+  live.sync.storage.setItem('board-feedback-2026-11-08',JSON.stringify({'1-D':{copied:true,quote:true}}));
+  await waitFor(()=>live.sync.status.phase==='syncing',1500,'in-flight action never started');
+  live.sync.storage.setItem('board-feedback-2026-11-08',JSON.stringify({'1-D':{copied:true,quote:true,approved:true}}));
+  firstRelease();
+  await waitFor(()=>{const r=server.get(JSON.stringify(['2026-11-08','feedback','1-D']));return r&&r.value.quote===true&&r.value.approved===true&&live.sync.status.phase==='synced';},2000,'follow-up flush did not run');
+  assert.equal(live.label.textContent,'Saved online');
+ } finally { live.dispose(); }
+ const fail=runtimeLive({failEvent:true});
+ try{
+  fail.form.elements.password.value='fixture-test-not-real';
+  await fail.form.onsubmit({preventDefault(){},currentTarget:fail.form});
+  await fail.sync.ready; await fail.sync.init('2026-11-08');
+  fail.sync.storage.setItem('board-feedback-2026-11-08',JSON.stringify({'2-V1':{quote:true}}));
+  await waitFor(()=>fail.sync.status.lastError,1500,'failed flush did not record an error');
+  assert.match(fail.label.textContent,/Sync failed/);
+  assert.doesNotMatch(fail.label.textContent,/sync pending/);
+ } finally { fail.dispose(); }
+
+console.log('PASS: password-only shell; no data or privileged keys; wrong password leaves locked; durable localStorage session across reload/new-tab/restart; sessionStorage migration; persistent outbox; independent field merges including approved+edit; history; isolated shared-board keys; Edit+Approved controls; hover titles; immediate sync after every action; in-flight follow-up flush; errors not stuck as sync pending.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

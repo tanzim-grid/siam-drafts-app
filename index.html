@@ -49,7 +49,7 @@ window.BoardSync = (() => {
     }
     return data;
   }
-  let user, day, prefix, busy = false, retry = 1000, timer, stateRows = [], mounted = false;
+  let user, day, prefix, busy = false, pendingFlush = false, retry = 1000, timer, stateRows = [], mounted = false;
   const raw = window.localStorage;
   const status = { phase: 'locked', lastError: null };
   let resolveReady;
@@ -82,7 +82,11 @@ window.BoardSync = (() => {
   }
   function updateStatus() {
     const el = document.getElementById('masum-sync-label');
-    if (el) el.textContent = status.phase === 'synced' ? 'Saved online' : status.phase === 'queued' ? 'Saved locally · sync pending' : status.phase === 'syncing' ? 'Syncing…' : 'Unlocked · ready';
+    if (el) el.textContent = status.phase === 'synced' ? 'Saved online'
+      : status.phase === 'syncing' ? 'Syncing…'
+      : status.phase === 'queued' && status.lastError ? 'Sync failed · ' + status.lastError
+      : status.phase === 'queued' ? 'Saved locally · sync pending'
+      : 'Unlocked · ready';
   }
   const storage = {
     getItem(key) { return raw.getItem(keyFor(key)); },
@@ -101,7 +105,7 @@ window.BoardSync = (() => {
         }
         if (Object.keys(patch).length) q.push({ id: crypto.randomUUID(), day: next.scope, kind: next.kind, item, patch });
       }
-      saveQueue(q); status.phase = 'queued'; updateStatus(); schedule(400);
+      saveQueue(q); status.phase = 'queued'; status.lastError = null; updateStatus(); if (busy) pendingFlush = true; else schedule(0);
     }
   };
   const entityKey = r => JSON.stringify([r.day, r.kind, r.item]);
@@ -138,8 +142,9 @@ window.BoardSync = (() => {
   }
   function schedule(ms) { clearTimeout(timer); timer = setTimeout(flush,ms); }
   async function flush() {
-    if (busy || !user || !day) return;
-    busy = true; status.phase='syncing'; updateStatus();
+    if (busy) { pendingFlush = true; return; }
+    if (!user || !day) return;
+    busy = true; pendingFlush = false; status.phase='syncing'; updateStatus();
     try {
       if (!navigator.onLine) throw new Error('Offline');
       while (queue().length) {
@@ -147,9 +152,9 @@ window.BoardSync = (() => {
         await request('/event',{method:'POST',body:JSON.stringify(e)});
         saveQueue(queue().filter(x=>x.id!==e.id));
       }
-      await pull(); retry=1000; status.phase=queue().length ? 'queued':'synced'; status.lastError=null;
-    } catch(e) { status.phase='queued'; status.lastError=e.message; schedule(retry); retry=Math.min(60000,retry*2); }
-    finally { busy=false; updateStatus(); }
+      await pull(); retry=1000; status.lastError=null; status.phase=(queue().length||pendingFlush)?'queued':'synced';
+    } catch(e) { status.phase='queued'; status.lastError=e&&e.message?e.message:'Sync failed'; pendingFlush=false; schedule(retry); retry=Math.min(60000,retry*2); }
+    finally { busy=false; updateStatus(); if (pendingFlush) { pendingFlush=false; schedule(0); } }
   }
 
   function boardGatePalette(){
