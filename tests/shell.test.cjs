@@ -130,6 +130,7 @@ assert.ok(html.includes('function boardGatePalette') && html.includes("getItem('
 assert.ok(!html.includes('Toggle dark/light mode') && !html.includes('noman-forlater') && !html.includes('__YOUR_PASSWORD_SHA256__'));
 
 assert.ok(html.includes('pendingFlush') && html.includes('else schedule(0)') && !html.includes('schedule(400)'));
+assert.ok(html.includes("String(err.message||'')==='Invalid event'"));
 assert.ok(html.includes("Sync failed · '"));
 
  // Immediate sync after every action (real timers). Errors must not look like a stuck "sync pending".
@@ -139,7 +140,7 @@ assert.ok(html.includes("Sync failed · '"));
   const label={textContent:''};
   const timeouts=new Set();
   let eventDelay=opts.eventDelay||(async()=>{});
-  let failEvent=!!opts.failEvent;
+  let failEvent=opts.failEvent||false;
   const button={disabled:false},form={elements:{password:{value:'',type:'password'}},querySelector:()=>button},message={textContent:''},reveal={setAttribute(){}};
   const gate={style:{},querySelector:s=>s==='form'?form:s==='[data-show-password]'?reveal:message,remove(){},set innerHTML(v){}};
   const document={body:{appendChild(){}},createElement:()=>gate,getElementById:id=>id==='masum-sync-label'?label:{textContent:''}};
@@ -150,7 +151,7 @@ assert.ok(html.includes("Sync failed · '"));
    const authorized=opt.headers.Authorization==='Bearer '+'a'.repeat(64)&&!revoked;
    if(!authorized)return {ok:false,status:401,json:async()=>({error:'Password required'})};
    if(route==='batch')return {ok:true,status:200,json:async()=>({DATE:'2026-11-08',ROWS:Array.from({length:5},()=>({}))})};
-   if(route==='event'){await eventDelay();if(failEvent)return {ok:false,status:400,json:async()=>({error:'Invalid event'})};const k=JSON.stringify([body.day,body.kind,body.item]);const r=server.get(k)||{day:body.day,kind:body.kind,item:body.item,value:{}};for(const[f,v]of Object.entries(body.patch))if(v===null)delete r.value[f];else r.value[f]=v;server.set(k,r);return {ok:true,status:200,json:async()=>({ok:true})};}
+   if(route==='event'){await eventDelay();if(failEvent==='unavailable')return {ok:false,status:500,json:async()=>({error:'Board temporarily unavailable'})};if(failEvent)return {ok:false,status:400,json:async()=>({error:'Invalid event'})};const k=JSON.stringify([body.day,body.kind,body.item]);const r=server.get(k)||{day:body.day,kind:body.kind,item:body.item,value:{}};for(const[f,v]of Object.entries(body.patch))if(v===null)delete r.value[f];else r.value[f]=v;server.set(k,r);return {ok:true,status:200,json:async()=>({ok:true})};}
    if(route==='state'){await eventDelay();return {ok:true,status:200,json:async()=>[...server.values()].map(x=>structuredClone(x))};}
    if(route==='logout'){revoked=true;return {ok:true,status:200,json:async()=>({ok:true})};}
    return {ok:false,status:404,json:async()=>({error:'Not found'})};
@@ -181,7 +182,7 @@ assert.ok(html.includes("Sync failed · '"));
   await waitFor(()=>{const r=server.get(JSON.stringify(['2026-11-08','feedback','1-D']));return r&&r.value.quote===true&&r.value.approved===true&&live.sync.status.phase==='synced';},2000,'follow-up flush did not run');
   assert.equal(live.label.textContent,'Saved online');
  } finally { live.dispose(); }
- const fail=runtimeLive({failEvent:true});
+ const fail=runtimeLive({failEvent:'unavailable'});
  try{
   fail.form.elements.password.value='fixture-test-not-real';
   await fail.form.onsubmit({preventDefault(){},currentTarget:fail.form});
@@ -191,6 +192,19 @@ assert.ok(html.includes("Sync failed · '"));
   assert.match(fail.label.textContent,/Sync failed/);
   assert.doesNotMatch(fail.label.textContent,/sync pending/);
  } finally { fail.dispose(); }
+ const drop=runtimeLive();
+ try{
+  drop.form.elements.password.value='fixture-test-not-real';
+  await drop.form.onsubmit({preventDefault(){},currentTarget:drop.form});
+  await drop.sync.ready; await drop.sync.init('2026-11-08');
+  drop.setFailEvent(true);
+  drop.sync.storage.setItem('board-forlater',JSON.stringify({version:1,items:{'2026-11-15:1-V1':{uid:'2026-11-15:1-V1',cardId:'1-V1',boardDate:'2026-11-15',slot:'1',label:'V1',post:'P',type:'T',text:'edited',savedAt:100,updatedAt:200}}}));
+  await waitFor(()=>drop.sync.status.phase==='synced',1500,'rejected event was not dropped');
+  drop.setFailEvent(false);
+  drop.sync.storage.setItem('board-feedback-2026-11-08',JSON.stringify({'1-D':{approved:true}}));
+  await waitFor(()=>{const r=server.get(JSON.stringify(['2026-11-08','feedback','1-D']));return r&&r.value.approved===true&&drop.sync.status.phase==='synced';},2000,'valid event stayed blocked behind a rejected outbox item');
+  assert.equal(drop.label.textContent,'Saved online');
+ } finally { drop.dispose(); }
 
-console.log('PASS: password-only shell; no data or privileged keys; wrong password leaves locked; durable localStorage session across reload/new-tab/restart; sessionStorage migration; persistent outbox; independent field merges including approved+edit; history; isolated shared-board keys; Edit+Approved controls; hover titles; immediate sync after every action; in-flight follow-up flush; errors not stuck as sync pending.');
+console.log('PASS: password-only shell; no data or privileged keys; wrong password leaves locked; durable localStorage session across reload/new-tab/restart; sessionStorage migration; persistent outbox; independent field merges including approved+edit; history; isolated shared-board keys; Edit+Approved controls; hover titles; immediate sync after every action; in-flight follow-up flush; errors not stuck as sync pending; 400 Invalid event dropped from outbox.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

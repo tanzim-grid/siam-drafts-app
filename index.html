@@ -45,7 +45,7 @@ window.BoardSync = (() => {
       if(path==='/login' && response.status===401)throw new Error('Password did not match. It is case-sensitive; use Show to check what you type.');
       if(response.status===429)throw new Error('Too many unlock attempts. Wait five minutes before trying again.');
       if(response.status>=500)throw new Error('The board server is temporarily unavailable. Your password was not rejected; please retry later.');
-      throw new Error(data.error||'Board request failed (HTTP '+response.status+').');
+      const err=new Error(data.error||'Board request failed (HTTP '+response.status+').'); err.status=response.status; throw err;
     }
     return data;
   }
@@ -149,7 +149,12 @@ window.BoardSync = (() => {
       if (!navigator.onLine) throw new Error('Offline');
       while (queue().length) {
         const e=queue()[0];
-        await request('/event',{method:'POST',body:JSON.stringify(e)});
+        try {
+          await request('/event',{method:'POST',body:JSON.stringify(e)});
+        } catch (err) {
+          if (!(err && err.status===400 && String(err.message||'')==='Invalid event')) throw err;
+          // Permanently rejected; drop so one bad outbox item cannot block later actions.
+        }
         saveQueue(queue().filter(x=>x.id!==e.id));
       }
       await pull(); retry=1000; status.lastError=null; status.phase=(queue().length||pendingFlush)?'queued':'synced';
